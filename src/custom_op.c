@@ -1,24 +1,39 @@
-#include <stdio.h>
-#include <stdlib.h>
 #include "custom_op.h"
 #include "bigint.h"
 
-// Algoritmo de Euclides simplificado para inteiros pequenos
+// Máximo Divisor Comum (BigInt puro, sem conversão para int)
 void bigint_gcd(const BigInt *a, const BigInt *b, BigInt *result) {
-    char sa[128], sb[128];
-    int ai, bi;
+    BigInt A, B, T;
 
-    bigint_to_string(a, sa);
-    bigint_to_string(b, sb);
+    // Trabalhar com cópias
+    bigint_copy(&A, a);
+    bigint_copy(&B, b);
 
-    ai = atoi(sa);
-    bi = atoi(sb);
+    A.sign = 1;
+    B.sign = 1;
 
-    while (bi != 0) {
-        int temp = bi;
-        bi = ai % bi;
-        ai = temp;
+    // Casos base
+    if (bigint_is_zero(&A)) {
+        bigint_copy(result, &B);
+        return;
     }
-    sprintf(sa, "%d", ai);
-    bigint_from_string(result, sa);
+    if (bigint_is_zero(&B)) {
+        bigint_copy(result, &A);
+        return;
+    }
+
+    // Algoritmo de Euclides por subtrações
+    while (bigint_cmp(&A, &B) != 0) {
+        if (bigint_cmp(&A, &B) > 0) {
+            bigint_sub(&A, &B, &T); // A = A - B
+            bigint_copy(&A, &T);
+        } else {
+            bigint_sub(&B, &A, &T); // B = B - A
+            bigint_copy(&B, &T);
+        }
+    }
+
+    // Resultado final
+    bigint_copy(result, &A);
+    result->sign = 1;
 }

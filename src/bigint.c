@@ -77,6 +77,33 @@ void bigint_mul(const BigInt *a, const BigInt *b, BigInt *result) {
     result->sign = 1;
 }
 
+// Compara |a| e |b|
+// Retorna: 1 se a > b, 0 se a == b, -1 se a < b
+int bigint_cmp(const BigInt *a, const BigInt *b) {
+    if (a->size > b->size) return 1;
+    if (a->size < b->size) return -1;
+
+    for (int i = a->size - 1; i >= 0; i--) {
+        if (a->digits[i] > b->digits[i]) return 1;
+        if (a->digits[i] < b->digits[i]) return -1;
+    }
+    return 0;
+}
+
+// verifica se big int é zero
+int bigint_is_zero(const BigInt *n) {
+    return (n->size == 1 && n->digits[0] == 0);
+}
+
+// copia big int
+void bigint_copy(BigInt *dest, const BigInt *src) {
+    dest->size = src->size;
+    dest->sign = src->sign;
+    for (int i = 0; i < src->size; i++)
+        dest->digits[i] = src->digits[i];
+}
+
+
 // Divisão inteira e resto de BigInts (apenas positivos e b != 0)
 // Implementação simplificada para inteiros pequenos
 void bigint_div(const BigInt *a, const BigInt *b, BigInt *quotient, BigInt *remainder) {
