@@ -299,6 +299,7 @@ int li_divmod(const LargeInt *a, const LargeInt *b, LargeInt *q, LargeInt *r) {
         if (q->size == 1 && q->digits[0] == 0) q->sign = 1; // quociente zero deve ser positivo
     }
 
+    
     // normalizar r
     while (r->size > 1 && r->digits[r->size - 1] == 0) r->size--;
     if (li_is_zero(r)) {
