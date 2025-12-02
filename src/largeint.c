@@ -189,58 +189,149 @@ void li_mul(const LargeInt *a, const LargeInt *b, LargeInt *result) {
     result->sign = a->sign * b->sign;
 }
 
-int li_divmod(const LargeInt *a, const LargeInt *b, LargeInt *q, LargeInt *r) {
-    if (li_is_zero(b)) {
-        return -1; // ERRO: divisão por zero
+// Multiplica n por um inteiro pequeno (0..9). Usa base 10 por dígito.
+static void li_mul_small(const LargeInt *n, int m, LargeInt *out) {
+    // assumimos 0 <= m <= 9
+    memset(out->digits, 0, sizeof(out->digits));
+    if (m == 0 || (n->size == 1 && n->digits[0] == 0)) {
+        out->size = 1;
+        out->digits[0] = 0;
+        out->sign = 1;
+        return;
     }
 
-    LargeInt dividend;
-    li_copy(&dividend, a);
+    int carry = 0;
+    for (int i = 0; i < n->size; i++) {
+        int prod = n->digits[i] * m + carry;
+        out->digits[i] = prod % 10;
+        carry = prod / 10;
+    }
+    int pos = n->size;
+    while (carry) {
+        if (pos >= MAX_DIGITS) { // proteção
+            break;
+        }
+        out->digits[pos++] = carry % 10;
+        carry /= 10;
+    }
+    out->size = pos;
+    while (out->size > 1 && out->digits[out->size - 1] == 0) out->size--;
+    out->sign = n->sign * (m == 0 ? 1 : 1); // magnitude apenas; sinal gerenciado fora
+}
 
-    LargeInt divisor;
+// Versão corrigida e segura de li_divmod
+int li_divmod(const LargeInt *a, const LargeInt *b, LargeInt *q, LargeInt *r) {
+    if (li_is_zero(b)) return -1; // divisão por zero
+
+    // Cópias locais (vamos operar com magnitude positiva)
+    LargeInt dividend, divisor;
+    li_copy(&dividend, a);
     li_copy(&divisor, b);
 
+    int sign_a = dividend.sign;
+    int sign_b = divisor.sign;
+
+    // operar com magnitude (forces positive)
+    dividend.sign = 1;
+    divisor.sign = 1;
+
+    // inicializa q e r
+    for (int i = 0; i < MAX_DIGITS; i++) q->digits[i] = 0;
     q->size = 0;
-    q->sign = a->sign * b->sign;
+    q->sign = (sign_a * sign_b); // sinal do quociente (ajustaremos se zero)
 
     r->size = 1;
+    for (int i = 0; i < MAX_DIGITS; i++) r->digits[i] = 0;
     r->digits[0] = 0;
     r->sign = 1;
 
+    // laço: processa dígitos do dividend do mais-significativo para o menos
     for (int i = dividend.size - 1; i >= 0; i--) {
-
-        for (int j = r->size; j > 0; j--)
-            r->digits[j] = r->digits[j - 1];
-
+        // shift left de r (multiplica por 10) -> movemos todos os dígitos para cima
+        if (r->size + 1 > MAX_DIGITS) return -2; // overflow de buffer
+        for (int j = r->size; j > 0; j--) r->digits[j] = r->digits[j - 1];
         r->digits[0] = dividend.digits[i];
         r->size++;
-        while (r->size > 1 && r->digits[r->size - 1] == 0)
-            r->size--;
+        while (r->size > 1 && r->digits[r->size - 1] == 0) r->size--;
 
-        int count = 0;
-
-        while (li_cmp(r, &divisor) >= 0) {
-            LargeInt temp;
-            li_sub(r, &divisor, &temp);
-            li_copy(r, &temp);
-            count++;
+        // buscar o dígito do quociente (0..9) usando busca binária
+        int low = 0, high = 9, best = 0;
+        while (low <= high) {
+            int mid = (low + high) / 2;
+            LargeInt prod;
+            li_mul_small(&divisor, mid, &prod); // prod = divisor * mid
+            int cmp = li_cmp(&prod, r); // compara magnitudes
+            if (cmp <= 0) { // prod <= r
+                best = mid;
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
         }
 
-        q->digits[q->size++] = count;
+        // subtrai best * divisor de r
+        if (best > 0) {
+            LargeInt prod;
+            li_mul_small(&divisor, best, &prod);
+            LargeInt tmp;
+            li_sub(r, &prod, &tmp); // r = r - prod
+            li_copy(r, &tmp);
+        }
+        // acrescenta dígito ao quociente (em ordem MSB-first)
+        if (q->size >= MAX_DIGITS) return -2;
+        q->digits[q->size++] = best;
     }
 
-    // Inverte quociente
-    for (int i = 0; i < q->size / 2; i++) {
-        int tmp = q->digits[i];
-        q->digits[i] = q->digits[q->size - 1 - i];
-        q->digits[q->size - 1 - i] = tmp;
+    // Agora q->digits[0] é MSB — precisamos inverter para convenção LSB-first
+    if (q->size == 0) {
+        // quociente zero
+        q->size = 1;
+        q->digits[0] = 0;
+        q->sign = 1;
+    } else {
+        for (int i = 0; i < q->size / 2; i++) {
+            int tmp = q->digits[i];
+            q->digits[i] = q->digits[q->size - 1 - i];
+            q->digits[q->size - 1 - i] = tmp;
+        }
+        // normalizar zeros ao topo
+        while (q->size > 1 && q->digits[q->size - 1] == 0) q->size--;
+        if (q->size == 1 && q->digits[0] == 0) q->sign = 1; // quociente zero deve ser positivo
     }
 
-    while (q->size > 1 && q->digits[q->size - 1] == 0)
-        q->size--;
+    // normalizar r
+    while (r->size > 1 && r->digits[r->size - 1] == 0) r->size--;
+    if (li_is_zero(r)) {
+        r->size = 1;
+        r->digits[0] = 0;
+        r->sign = 1;
+    } else {
+        r->sign = 1; // escolha: resto não-negativo (mude para sign_a se preferir)
+    }
 
+    // Ajuste euclidiano final: garante a = b*q + r com 0 <= r < |b|
+if (sign_a < 0 && !li_is_zero(r)) {
+    LargeInt one;
+    li_from_string(&one, "1");
+
+    // q = q - sign(b)
+    if (sign_b > 0) {
+        li_sub(q, &one, q);
+    } else {
+        li_add(q, &one, q);
+    }
+
+    // r = |b| - r
+    LargeInt absb;
+    li_copy(&absb, &divisor); // divisor já é |b|
+    LargeInt newr;
+    li_sub(&absb, r, &newr);
+    li_copy(r, &newr);
+}
+    
     return 0;
 }
+
 
 int li_div(const LargeInt *a, const LargeInt *b, LargeInt *q) {
     LargeInt r;
