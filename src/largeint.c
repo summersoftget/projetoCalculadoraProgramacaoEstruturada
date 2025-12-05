@@ -219,11 +219,11 @@ static void li_mul_small(const LargeInt *n, int m, LargeInt *out) {
     out->sign = n->sign * (m == 0 ? 1 : 1); // magnitude apenas; sinal gerenciado fora
 }
 
-// Versão corrigida e segura de li_divmod
+
 int li_divmod(const LargeInt *a, const LargeInt *b, LargeInt *q, LargeInt *r) {
     if (li_is_zero(b)) return -1; // divisão por zero
 
-    // Cópias locais (vamos operar com magnitude positiva)
+
     LargeInt dividend, divisor;
     li_copy(&dividend, a);
     li_copy(&divisor, b);
@@ -231,7 +231,6 @@ int li_divmod(const LargeInt *a, const LargeInt *b, LargeInt *q, LargeInt *r) {
     int sign_a = dividend.sign;
     int sign_b = divisor.sign;
 
-    // operar com magnitude (forces positive)
     dividend.sign = 1;
     divisor.sign = 1;
 
@@ -245,7 +244,7 @@ int li_divmod(const LargeInt *a, const LargeInt *b, LargeInt *q, LargeInt *r) {
     r->digits[0] = 0;
     r->sign = 1;
 
-    // laço: processa dígitos do dividend do mais-significativo para o menos
+    // laço: processa dígitos do dividendo do mais-significativo para o menos
     for (int i = dividend.size - 1; i >= 0; i--) {
         // shift left de r (multiplica por 10) -> movemos todos os dígitos para cima
         if (r->size + 1 > MAX_DIGITS) return -2; // overflow de buffer
